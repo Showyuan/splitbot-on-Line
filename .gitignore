@@ -1,0 +1,30 @@
+# Secrets
+.env
+
+# Local data
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# OS / runtime
+*.log
+*.pid
+
+# Local-only deploy artifacts (server-specific, not for the public repo)
+deploy/install.sh
+deploy/*.patch.txt
+deploy/*.local.*
