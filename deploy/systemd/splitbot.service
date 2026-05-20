@@ -9,8 +9,8 @@ Group=splitbot
 WorkingDirectory=/opt/splitbot
 EnvironmentFile=/opt/splitbot/.env
 # If your project path contains spaces, wrap the executable in double quotes:
-#   ExecStart="/path/with space/venv/bin/gunicorn" --bind 127.0.0.1:5050 ...
-ExecStart=/opt/splitbot/venv/bin/gunicorn --bind 127.0.0.1:5050 --workers 2 --access-logfile - --error-logfile - app:app
+#   ExecStart="/path/with space/.venv/bin/gunicorn" --bind 127.0.0.1:5050 ...
+ExecStart=/opt/splitbot/.venv/bin/gunicorn --bind 127.0.0.1:5050 --workers 2 --access-logfile - --error-logfile - app:app
 Restart=on-failure
 RestartSec=3
 
