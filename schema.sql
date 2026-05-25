@@ -19,6 +19,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_per_group
 CREATE TABLE IF NOT EXISTS expenses (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id   INTEGER NOT NULL REFERENCES events(id),
+  seq        INTEGER,            -- per-event display number, starts at 1
   payer_id   TEXT NOT NULL,
   amount     INTEGER NOT NULL,
   note       TEXT,
@@ -30,4 +31,12 @@ CREATE TABLE IF NOT EXISTS expense_shares (
   user_id    TEXT NOT NULL,
   share      INTEGER NOT NULL,
   PRIMARY KEY (expense_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS reminders (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id   TEXT NOT NULL,
+  seq        INTEGER,            -- per-group display number, starts at 1
+  item       TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

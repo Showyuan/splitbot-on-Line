@@ -11,6 +11,27 @@ def init():
         schema = f.read()
     with connect() as conn:
         conn.executescript(schema)
+    _migrate()
+
+
+def _migrate():
+    """Idempotent schema upgrades for existing databases."""
+    with connect() as conn:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(expenses)").fetchall()]
+        if "seq" not in cols:
+            try:
+                conn.execute("ALTER TABLE expenses ADD COLUMN seq INTEGER")
+            except sqlite3.OperationalError:
+                return  # added by a concurrent worker; nothing to do
+            # Backfill: number each event's expenses 1..N by insertion order.
+            ev_ids = [r["event_id"] for r in
+                      conn.execute("SELECT DISTINCT event_id FROM expenses").fetchall()]
+            for eid in ev_ids:
+                rows = conn.execute(
+                    "SELECT id FROM expenses WHERE event_id = ? ORDER BY id", (eid,)
+                ).fetchall()
+                for i, r in enumerate(rows, start=1):
+                    conn.execute("UPDATE expenses SET seq = ? WHERE id = ?", (i, r["id"]))
 
 
 @contextmanager
@@ -99,24 +120,28 @@ def close_event(event_id: int):
 
 def add_expense(event_id: int, payer_id: str, amount: int,
                 shares: list[tuple[str, int]], note: str | None = None) -> int:
-    """shares = [(user_id, share_amount), ...]"""
+    """shares = [(user_id, share_amount), ...]. Returns the per-event seq number."""
     with connect() as conn:
+        seq = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM expenses WHERE event_id = ?",
+            (event_id,),
+        ).fetchone()["next"]
         cur = conn.execute(
-            "INSERT INTO expenses(event_id, payer_id, amount, note) VALUES(?, ?, ?, ?)",
-            (event_id, payer_id, amount, note),
+            "INSERT INTO expenses(event_id, seq, payer_id, amount, note) VALUES(?, ?, ?, ?, ?)",
+            (event_id, seq, payer_id, amount, note),
         )
         expense_id = cur.lastrowid
         conn.executemany(
             "INSERT INTO expense_shares(expense_id, user_id, share) VALUES(?, ?, ?)",
             [(expense_id, uid, s) for uid, s in shares],
         )
-        return expense_id
+        return seq
 
 
 def list_expenses(event_id: int):
     with connect() as conn:
         exps = conn.execute(
-            "SELECT id, payer_id, amount, note FROM expenses WHERE event_id = ? ORDER BY id",
+            "SELECT id, seq, payer_id, amount, note FROM expenses WHERE event_id = ? ORDER BY seq",
             (event_id,),
         ).fetchall()
         shares = conn.execute(
@@ -133,6 +158,7 @@ def list_expenses(event_id: int):
     return [
         {
             "id": e["id"],
+            "seq": e["seq"],
             "payer_id": e["payer_id"],
             "amount": e["amount"],
             "note": e["note"],
@@ -142,10 +168,45 @@ def list_expenses(event_id: int):
     ]
 
 
-def delete_expense(event_id: int, expense_id: int) -> bool:
+def delete_expense(event_id: int, seq: int) -> bool:
+    """Delete by per-event seq number."""
     with connect() as conn:
         cur = conn.execute(
-            "DELETE FROM expenses WHERE id = ? AND event_id = ?",
-            (expense_id, event_id),
+            "DELETE FROM expenses WHERE seq = ? AND event_id = ?",
+            (seq, event_id),
+        )
+        return cur.rowcount > 0
+
+
+# --- reminders (group-scoped "remember to bring" checklist) ---
+
+def add_reminder(group_id: str, item: str) -> int:
+    """Append an item; returns its per-group seq number."""
+    with connect() as conn:
+        seq = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM reminders WHERE group_id = ?",
+            (group_id,),
+        ).fetchone()["next"]
+        conn.execute(
+            "INSERT INTO reminders(group_id, seq, item) VALUES(?, ?, ?)",
+            (group_id, seq, item),
+        )
+        return seq
+
+
+def list_reminders(group_id: str):
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT seq, item FROM reminders WHERE group_id = ? ORDER BY seq",
+            (group_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_reminder(group_id: str, seq: int) -> bool:
+    with connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM reminders WHERE group_id = ? AND seq = ?",
+            (group_id, seq),
         )
         return cur.rowcount > 0

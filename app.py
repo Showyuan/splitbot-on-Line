@@ -37,6 +37,10 @@ app = Flask(__name__)
 handler = WebhookHandler(CHANNEL_SECRET)
 configuration = Configuration(access_token=CHANNEL_ACCESS_TOKEN)
 
+# Ensure schema + migrations are applied on startup (also under gunicorn,
+# where __main__ does not run). Idempotent.
+db.init()
+
 
 @app.route("/", methods=["GET"])
 def index():

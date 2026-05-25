@@ -22,6 +22,9 @@ def _help_flex() -> dict:
         ("/結算", "誰該轉給誰", None),
         ("/結清", "關閉當前事件", None),
         ("/成員", "列出已註冊成員", None),
+        ("/記得要帶", "加入提醒清單", "/記得要帶 雨傘"),
+        ("/記得帶", "列出提醒清單", None),
+        ("/記得帶刪", "刪除清單某項", "/記得帶刪 2"),
     ]
 
     def row(cmd: str, desc: str) -> dict:
@@ -199,7 +202,7 @@ def cmd_pay(group_id: str, args: str, sender_id: str, sender_name: str, **_) -> 
     shares = cmd.custom_shares if cmd.custom_shares is not None \
         else equal_split(cmd.amount, len(user_ids))
 
-    expense_id = db.add_expense(
+    seq = db.add_expense(
         event_id=ev["id"],
         payer_id=payer_id,
         amount=cmd.amount,
@@ -210,7 +213,7 @@ def cmd_pay(group_id: str, args: str, sender_id: str, sender_name: str, **_) -> 
     parts = []
     for uid, s in zip(user_ids, shares):
         parts.append(f"{db.display_name(group_id, uid)} {s}")
-    return f"已記錄 #{expense_id}：{payer_name} 付 {cmd.amount}\n分擔：{'、'.join(parts)}"
+    return f"已記錄 #{seq}：{payer_name} 付 {cmd.amount}\n分擔：{'、'.join(parts)}"
 
 
 def cmd_pay_for(group_id: str, args: str, sender_id: str, sender_name: str, **_) -> str:
@@ -245,7 +248,7 @@ def cmd_pay_for(group_id: str, args: str, sender_id: str, sender_name: str, **_)
     shares = cmd.custom_shares if cmd.custom_shares is not None \
         else equal_split(cmd.amount, len(user_ids))
 
-    expense_id = db.add_expense(
+    seq = db.add_expense(
         event_id=ev["id"],
         payer_id=sender_id,
         amount=cmd.amount,
@@ -253,7 +256,7 @@ def cmd_pay_for(group_id: str, args: str, sender_id: str, sender_name: str, **_)
     )
     payer_name = db.display_name(group_id, sender_id)
     parts = [f"{db.display_name(group_id, uid)} {s}" for uid, s in zip(user_ids, shares)]
-    return f"已記錄 #{expense_id}：{payer_name} 代付 {cmd.amount}\n分擔：{'、'.join(parts)}"
+    return f"已記錄 #{seq}：{payer_name} 代付 {cmd.amount}\n分擔：{'、'.join(parts)}"
 
 
 def cmd_owe(group_id: str, args: str, sender_id: str, sender_name: str, **_) -> str:
@@ -276,14 +279,14 @@ def cmd_owe(group_id: str, args: str, sender_id: str, sender_name: str, **_) -> 
     if creditor_id == sender_id:
         return "不能欠自己 :)"
 
-    expense_id = db.add_expense(
+    seq = db.add_expense(
         event_id=ev["id"],
         payer_id=creditor_id,
         amount=amount,
         shares=[(sender_id, amount)],
     )
     return (
-        f"已記錄 #{expense_id}："
+        f"已記錄 #{seq}："
         f"{db.display_name(group_id, sender_id)} 欠 {db.display_name(group_id, creditor_id)} {amount}"
     )
 
@@ -301,7 +304,7 @@ def cmd_list(group_id: str, **_) -> str:
         parts = "、".join(
             f"{db.display_name(group_id, uid)} {s}" for uid, s in e["shares"]
         )
-        lines.append(f"#{e['id']} {payer} 付 {e['amount']}（{parts}）")
+        lines.append(f"#{e['seq']} {payer} 付 {e['amount']}（{parts}）")
 
     balances = settle.compute_balances(exps)
     transfers = settle.settle(balances)
@@ -323,11 +326,11 @@ def cmd_delete(group_id: str, args: str, **_) -> str:
     if not ev:
         return "目前沒有進行中的事件。"
     try:
-        expense_id = int(args.strip())
+        seq = int(args.strip())
     except ValueError:
         return "用法：/刪 <id>"
-    ok = db.delete_expense(ev["id"], expense_id)
-    return f"已刪除 #{expense_id}" if ok else f"找不到 #{expense_id}"
+    ok = db.delete_expense(ev["id"], seq)
+    return f"已刪除 #{seq}" if ok else f"找不到 #{seq}"
 
 
 def cmd_settle(group_id: str, **_) -> str:
@@ -349,6 +352,34 @@ def cmd_settle(group_id: str, **_) -> str:
     return "\n".join(lines)
 
 
+def cmd_remind_add(group_id: str, args: str, **_) -> str:
+    item = args.strip()
+    if not item:
+        return "用法：/記得要帶 <物品>　（例如：/記得要帶 雨傘）"
+    seq = db.add_reminder(group_id, item)
+    total = len(db.list_reminders(group_id))
+    return f"已加入 #{seq}：{item}（清單共 {total} 項，用 /記得帶 查看）"
+
+
+def cmd_remind_list(group_id: str, **_) -> str:
+    items = db.list_reminders(group_id)
+    if not items:
+        return "提醒清單是空的。用 /記得要帶 <物品> 加入。"
+    lines = ["記得帶："]
+    for it in items:
+        lines.append(f"#{it['seq']} {it['item']}")
+    return "\n".join(lines)
+
+
+def cmd_remind_del(group_id: str, args: str, **_) -> str:
+    try:
+        seq = int(args.strip())
+    except ValueError:
+        return "用法：/記得帶刪 <編號>　（例如：/記得帶刪 2）"
+    ok = db.delete_reminder(group_id, seq)
+    return f"已刪除 #{seq}" if ok else f"清單裡找不到 #{seq}"
+
+
 COMMANDS = {
     "/help": cmd_help,
     "/新事件": cmd_new_event,
@@ -361,6 +392,9 @@ COMMANDS = {
     "/列表": cmd_list,
     "/刪": cmd_delete,
     "/結算": cmd_settle,
+    "/記得要帶": cmd_remind_add,
+    "/記得帶": cmd_remind_list,
+    "/記得帶刪": cmd_remind_del,
 }
 
 
