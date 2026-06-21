@@ -10,13 +10,13 @@ A LINE group-chat bot for splitting expenses. Members record who paid what with 
 - Two-pointer settlement algorithm for the minimum number of transfers
 - `/列表` shows expenses *and* the current settlement summary
 - One active "event" per group; close it with `/結清` and start a new one
-- `/help` renders as a LINE Flex Message card (column-aligned, configurable title)
+- `/book` renders as a LINE Flex Message card (column-aligned, configurable title)
 
 ## Commands
 
 | Command | Example | Description |
 |---|---|---|
-| `/help` | `/help` | Show the Flex help card |
+| `/book` | `/book` | Show the Flex help card (alias: `/help`) |
 | `/新事件 <name>` | `/新事件 Okinawa trip` | Start a new event (one active event per group) |
 | `/事件` | `/事件` | Show the current event |
 | `/付 <amount> <payer> <others...>` | `/付 1200 我 A B` | Payer + others split equally |
@@ -28,6 +28,7 @@ A LINE group-chat bot for splitting expenses. Members record who paid what with 
 | `/結算` | `/結算` | Show who pays whom |
 | `/結清` | `/結清` | Close the current event |
 | `/成員` | `/成員` | List registered members |
+| `/加成員 <name>` | `/加成員 Bob` | Add an anonymous member (for someone not in the LINE group) |
 
 The keyword `all` / `全部` / `大家` / `全員` / `所有人` expands to every registered member of the group:
 
@@ -70,7 +71,7 @@ ngrok http 5050
 
 ### Optional branding
 
-Set `BOT_TITLE` and `BOT_SUBTITLE` in `.env` to customize the `/help` Flex card header. Both default to English strings; see `.env.example`.
+Set `BOT_TITLE` and `BOT_SUBTITLE` in `.env` to customize the `/book` Flex card header. Both default to English strings; see `.env.example`.
 
 ## LINE Developers Console setup
 

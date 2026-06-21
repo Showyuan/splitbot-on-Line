@@ -10,7 +10,7 @@ BOT_SUBTITLE = os.environ.get("BOT_SUBTITLE", "Group expense splitter")
 
 
 def _help_flex() -> dict:
-    """Build a Flex Bubble for /help — column-aligned card."""
+    """Build a Flex Bubble for /book — column-aligned card."""
     cmd_rows = [
         ("/新事件", "建立新事件", "/新事件 沖繩旅遊"),
         ("/事件", "看當前事件", None),
@@ -22,6 +22,7 @@ def _help_flex() -> dict:
         ("/結算", "誰該轉給誰", None),
         ("/結清", "關閉當前事件", None),
         ("/成員", "列出已註冊成員", None),
+        ("/加成員", "加匿名成員（不在群組裡的人）", "/加成員 小明"),
         ("/記得要帶", "加入提醒清單", "/記得要帶 雨傘"),
         ("/記得帶", "列出提醒清單", None),
         ("/記得帶刪", "刪除清單某項", "/記得帶刪 2"),
@@ -122,8 +123,33 @@ def cmd_members(group_id: str, **_) -> str:
     members = db.list_members(group_id)
     if not members:
         return "還沒有成員註冊。請每個人在群組裡發一句話即可。"
-    names = "、".join(m["display_name"] for m in members)
-    return f"已註冊成員（{len(members)}）：{names}"
+    parts = []
+    for m in members:
+        if m["user_id"].startswith("anon:"):
+            parts.append(f"{m['display_name']}（匿名）")
+        else:
+            parts.append(m["display_name"])
+    return f"已註冊成員（{len(members)}）：{'、'.join(parts)}"
+
+
+def cmd_add_member(group_id: str, args: str, **_) -> str:
+    """/加成員 <name> — create an anonymous member (for people not in the LINE group)."""
+    name = args.strip()
+    if not name:
+        return "用法：/加成員 <名字>　（例如：/加成員 小明）"
+    if name in ("我", "self") or name in ALL_KEYWORDS:
+        return f"「{name}」是保留字，請換一個名字。"
+    if " " in name:
+        return "名字不能含空白（會被指令解析拆開），請改用沒空白的暱稱。"
+    if name.startswith("/") or name.startswith("@"):
+        return "名字開頭不可用 / 或 @。"
+    uid = db.add_anon_member(group_id, name)
+    if uid is None:
+        return f"「{name}」已經存在於群組成員裡了。"
+    return (
+        f"已加入匿名成員「{name}」。\n"
+        f"現在可以在 /付、/代付、/欠、/結算 等指令中使用這個名字。"
+    )
 
 
 ALL_KEYWORDS = {"all", "All", "ALL", "全部", "全員", "大家", "所有人"}
@@ -381,11 +407,13 @@ def cmd_remind_del(group_id: str, args: str, **_) -> str:
 
 
 COMMANDS = {
-    "/help": cmd_help,
+    "/book": cmd_help,
+    "/help": cmd_help,  # alias
     "/新事件": cmd_new_event,
     "/事件": cmd_event,
     "/結清": cmd_close_event,
     "/成員": cmd_members,
+    "/加成員": cmd_add_member,
     "/付": cmd_pay,
     "/代付": cmd_pay_for,
     "/欠": cmd_owe,
@@ -406,7 +434,7 @@ def dispatch(text: str, group_id: str, sender_id: str, sender_name: str):
     head, _, rest = text.partition(" ")
     handler = COMMANDS.get(head)
     if not handler:
-        return f"未知指令「{head}」。輸入 /help 看可用指令。"
+        return f"未知指令「{head}」。輸入 /book 看可用指令。"
     return handler(
         group_id=group_id,
         args=rest,

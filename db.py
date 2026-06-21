@@ -1,4 +1,5 @@
 import os
+import secrets
 import sqlite3
 from contextlib import contextmanager
 
@@ -77,6 +78,16 @@ def find_member_by_name(group_id: str, name: str):
             (group_id, name),
         ).fetchone()
     return row["user_id"] if row else None
+
+
+def add_anon_member(group_id: str, name: str) -> str | None:
+    """Create an anonymous member with display_name `name`. Returns user_id, or
+    None if `name` is already taken in this group."""
+    if find_member_by_name(group_id, name) is not None:
+        return None
+    anon_id = f"anon:{secrets.token_hex(6)}"
+    upsert_member(group_id, anon_id, name)
+    return anon_id
 
 
 def display_name(group_id: str, user_id: str) -> str:
